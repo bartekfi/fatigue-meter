@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(awk:*)",
+      "Bash(shuf)",
+      "Bash(echo:*)",
+      "Bash(sort:*)",
+      "Bash(chmod:*)",
+      "Bash(~/.claude/skills/lazy-meter/lazy-meter:*)",
+      "WebSearch",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:shipyard.build)",
+      "WebFetch(domain:www.builder.io)",
+      "WebFetch(domain:sderosiaux.medium.com)",
+      "WebFetch(domain:arize.com)",
+      "Bash(~/.claude/skills/fatigue/fatigue:*)",
+      "Bash(~/.claude/statusline.sh:*)",
+      "Bash(printf:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

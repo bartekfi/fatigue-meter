@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+"""
+Fatigue - Prompt Energy Tracker
+
+Tracks your prompting energy levels throughout the day. See when you're
+sharp vs running on fumes.
+"""
+
+import sys
+import os
+import argparse
+import json
+from datetime import datetime, timedelta
+from collections import defaultdict
+
+# Add lib to path
+script_dir = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(script_dir, 'lib'))
+
+import history
+import analyzer
+import storage
+import report
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Analyze prompt quality in your Claude Code history'
+    )
+
+    parser.add_argument('--all', action='store_true',
+                       help='Analyze entire history (default: last 30 days)')
+    parser.add_argument('--days', type=int, default=30,
+                       help='Number of days to analyze (default: 30)')
+    parser.add_argument('--project', type=str,
+                       help='Filter by project name')
+    parser.add_argument('--shame', action='store_true',
+                       help='Show only hall of shame (laziest prompts)')
+    parser.add_argument('--pride', action='store_true',
+                       help='Show only hall of fame (best prompts)')
+    parser.add_argument('--stamina', action='store_true',
+                       help='Show stamina heatmap (quality by hour/day)')
+    parser.add_argument('--session', action='store_true',
+                       help='Show session pattern (quality by position)')
+    parser.add_argument('--trend', action='store_true',
+                       help='Show weekly trend')
+    parser.add_argument('--today', action='store_true',
+                       help='Show today\'s hourly energy levels')
+    parser.add_argument('--yesterday', action='store_true',
+                       help='Show yesterday\'s hourly energy levels')
+    parser.add_argument('--week', action='store_true',
+                       help='Show this week\'s daily energy levels')
+    parser.add_argument('--limit', type=int, default=1000,
+                       help='Max prompts to analyze (default: 1000)')
+    parser.add_argument('--json', action='store_true',
+                       help='Output raw JSON')
+
+    return parser.parse_args()
+
+
+def group_into_sessions(prompts, gap_minutes=30):
+    """Group prompts into sessions based on time gaps."""
+    if not prompts:
+        return []
+
+    sessions = []
+    current_session = []
+    last_ts = None
+
+    for prompt in sorted(prompts, key=lambda p: p.timestamp):
+        if last_ts and (prompt.timestamp - last_ts).total_seconds() > gap_minutes * 60:
+            if len(current_session) >= 3:
+                sessions.append(current_session)
+            current_session = []
+
+        current_session.append(prompt)
+        last_ts = prompt.timestamp
+
+    if len(current_session) >= 3:
+        sessions.append(current_session)
+
+    return sessions
+
+
+def calculate_fatigue_metrics(prompts):
+    """
+    Calculate fatigue-specific metrics that are more sensitive to decline.
+
+    Fatigue signals:
+    - Length: chars per prompt (shorter = more fatigued)
+    - Grunt ratio: % of very short/lazy prompts
+    - Effort: average words per prompt
+    - Specificity: file refs, code mentions per prompt
+    """
+    if not prompts:
+        return None
+
+    lengths = [len(p.text) for p in prompts]
+    words = [len(p.text.split()) for p in prompts]
+
+    # Count grunts (very short or lazy patterns)
+    grunt_patterns = ['yes', 'no', 'ok', 'okay', 'sure', 'continue', 'go',
+                      'do it', 'good', 'great', 'nice', 'thanks', 'let\'s do it',
+                      'let\'s go', 'sounds good']
+    grunts = sum(1 for p in prompts if p.text.lower().strip().rstrip('.!') in grunt_patterns
+                 or len(p.text) < 15)
+
+    # Count specificity (file refs, code, etc.)
+    import re
+    specificity = 0
+    for p in prompts:
+        specificity += len(re.findall(r'\b\w+\.(py|js|ts|tsx|go|rs|java|cpp)\b', p.text, re.I))
+        specificity += len(re.findall(r'`[^`]+`', p.text))
+        specificity += len(re.findall(r'@\w+', p.text))
+
+    return {
+        'avg_length': sum(lengths) / len(lengths),
+        'avg_words': sum(words) / len(words),
+        'grunt_ratio': grunts / len(prompts),
+        'specificity_per_prompt': specificity / len(prompts),
+        'total_prompts': len(prompts)
+    }
+
+
+def generate_today_report(prompts):
+    """Generate today's hourly sparkline report with fatigue detection."""
+    SPARKLINE_CHARS = '▁▂▃▄▅▆▇█'
+    FATIGUE_CHARS = '🟢🟢🟡🟡🟠🟠🔴🔴'  # Green to red
+
+    # Group prompts by hour
+    hourly_prompts = defaultdict(list)
+    for prompt in prompts:
+        hourly_prompts[prompt.timestamp.hour].append(prompt)
+
+    if not hourly_prompts:
+        return {"error": "No prompts found for today"}
+
+    hours = sorted(hourly_prompts.keys())
+
+    # Calculate fatigue metrics per hour
+    hourly_metrics = {}
+    for h in hours:
+        hourly_metrics[h] = calculate_fatigue_metrics(hourly_prompts[h])
+
+    # Calculate fatigue index (0-100, higher = more fatigued)
+    # Based on: lower length, higher grunt ratio, lower specificity
+    fatigue_scores = []
+    for h in hours:
+        m = hourly_metrics[h]
+        # Normalize each component to 0-100 fatigue scale
+        length_fatigue = max(0, min(100, 100 - (m['avg_length'] / 2)))  # <50 chars = high fatigue
+        grunt_fatigue = m['grunt_ratio'] * 100  # More grunts = more fatigue
+        specificity_fatigue = max(0, min(100, 100 - (m['specificity_per_prompt'] * 50)))  # Less specific = more fatigue
+
+        # Weighted average
+        fatigue = (length_fatigue * 0.4) + (grunt_fatigue * 0.4) + (specificity_fatigue * 0.2)
+        fatigue_scores.append(fatigue)
+
+    # Generate fatigue sparkline (inverted - high fatigue = low bar)
+    energy_scores = [100 - f for f in fatigue_scores]  # Convert to energy (inverse of fatigue)
+    min_e, max_e = min(energy_scores), max(energy_scores)
+    range_e = max_e - min_e if max_e > min_e else 1
+    energy_sparkline = ''.join(
+        SPARKLINE_CHARS[min(7, int((e - min_e) / range_e * 7))]
+        for e in energy_scores
+    )
+
+    # Also score-based sparkline for comparison
+    hourly_scores = defaultdict(list)
+    for prompt in prompts:
+        score = analyzer.score_prompt(prompt.text)
+        hourly_scores[prompt.timestamp.hour].append(score.total)
+
+    score_avgs = [sum(hourly_scores[h]) / len(hourly_scores[h]) for h in hours]
+
+    # Build hourly breakdown with fatigue
+    hourly_data = []
+    for i, h in enumerate(hours):
+        m = hourly_metrics[h]
+        fatigue = fatigue_scores[i]
+        energy = energy_scores[i]
+
+        # Energy bar (higher = more energy, less fatigue)
+        energy_bar = '█' * int(energy / 10) + '░' * (10 - int(energy / 10))
+
+        # Fatigue indicator
+        if fatigue < 30:
+            fatigue_indicator = '🟢'
+        elif fatigue < 50:
+            fatigue_indicator = '🟡'
+        elif fatigue < 70:
+            fatigue_indicator = '🟠'
+        else:
+            fatigue_indicator = '🔴'
+
+        hourly_data.append({
+            'hour': h,
+            'prompts': m['total_prompts'],
+            'avg_length': round(m['avg_length']),
+            'avg_words': round(m['avg_words'], 1),
+            'grunt_ratio': round(m['grunt_ratio'] * 100),
+            'specificity': round(m['specificity_per_prompt'], 1),
+            'fatigue': round(fatigue),
+            'energy': round(energy),
+            'energy_bar': energy_bar,
+            'indicator': fatigue_indicator,
+            'score': round(score_avgs[i], 1)
+        })
+
+    # Calculate trend
+    trend = 'steady'
+    trend_diff = 0
+    if len(fatigue_scores) >= 2:
+        first = fatigue_scores[0]
+        last = fatigue_scores[-1]
+        trend_diff = last - first
+        if trend_diff > 10:
+            trend = 'fatiguing'
+        elif trend_diff < -10:
+            trend = 'energizing'
+
+    # Overall stats
+    overall_fatigue = sum(fatigue_scores) / len(fatigue_scores) if fatigue_scores else 0
+    overall_metrics = calculate_fatigue_metrics(prompts)
+
+    return {
+        'summary': {
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'prompts_analyzed': len(prompts),
+            'avg_fatigue': round(overall_fatigue),
+            'avg_energy': round(100 - overall_fatigue),
+            'avg_length': round(overall_metrics['avg_length']),
+            'grunt_ratio': round(overall_metrics['grunt_ratio'] * 100),
+            'hours_active': len(hours),
+        },
+        'sparkline': {
+            'hours': [f'{h:02d}' for h in hours],
+            'energy': energy_sparkline,
+            'fatigue_values': [round(f) for f in fatigue_scores],
+            'energy_values': [round(e) for e in energy_scores]
+        },
+        'hourly': hourly_data,
+        'trend': {
+            'direction': trend,
+            'start_fatigue': round(fatigue_scores[0]) if fatigue_scores else 0,
+            'end_fatigue': round(fatigue_scores[-1]) if fatigue_scores else 0,
+            'change': round(trend_diff)
+        }
+    }
+
+
+def generate_week_report(prompts):
+    """Generate this week's daily energy report."""
+    SPARKLINE_CHARS = '▁▂▃▄▅▆▇█'
+    DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+    # Group prompts by date
+    daily_prompts = defaultdict(list)
+    for prompt in prompts:
+        date_key = prompt.timestamp.strftime('%Y-%m-%d')
+        daily_prompts[date_key].append(prompt)
+
+    if not daily_prompts:
+        return {"error": "No prompts found for this week"}
+
+    dates = sorted(daily_prompts.keys())
+
+    # Calculate fatigue metrics per day
+    daily_metrics = {}
+    for d in dates:
+        daily_metrics[d] = calculate_fatigue_metrics(daily_prompts[d])
+
+    # Calculate fatigue/energy per day
+    fatigue_scores = []
+    for d in dates:
+        m = daily_metrics[d]
+        length_fatigue = max(0, min(100, 100 - (m['avg_length'] / 2)))
+        grunt_fatigue = m['grunt_ratio'] * 100
+        specificity_fatigue = max(0, min(100, 100 - (m['specificity_per_prompt'] * 50)))
+        fatigue = (length_fatigue * 0.4) + (grunt_fatigue * 0.4) + (specificity_fatigue * 0.2)
+        fatigue_scores.append(fatigue)
+
+    energy_scores = [100 - f for f in fatigue_scores]
+
+    # Generate sparkline
+    min_e, max_e = min(energy_scores), max(energy_scores)
+    range_e = max_e - min_e if max_e > min_e else 1
+    energy_sparkline = ''.join(
+        SPARKLINE_CHARS[min(7, int((e - min_e) / range_e * 7))]
+        for e in energy_scores
+    )
+
+    # Build daily breakdown
+    daily_data = []
+    for i, d in enumerate(dates):
+        m = daily_metrics[d]
+        fatigue = fatigue_scores[i]
+        energy = energy_scores[i]
+        dt = datetime.strptime(d, '%Y-%m-%d')
+        day_name = DAY_NAMES[dt.weekday()]
+
+        energy_bar = '█' * int(energy / 10) + '░' * (10 - int(energy / 10))
+
+        if fatigue < 30:
+            indicator = '🟢'
+        elif fatigue < 50:
+            indicator = '🟡'
+        elif fatigue < 70:
+            indicator = '🟠'
+        else:
+            indicator = '🔴'
+
+        daily_data.append({
+            'date': d,
+            'day': day_name,
+            'prompts': m['total_prompts'],
+            'avg_length': round(m['avg_length']),
+            'grunt_ratio': round(m['grunt_ratio'] * 100),
+            'specificity': round(m['specificity_per_prompt'], 1),
+            'fatigue': round(fatigue),
+            'energy': round(energy),
+            'energy_bar': energy_bar,
+            'indicator': indicator
+        })
+
+    # Trend
+    trend = 'steady'
+    trend_diff = 0
+    if len(fatigue_scores) >= 2:
+        first = fatigue_scores[0]
+        last = fatigue_scores[-1]
+        trend_diff = last - first
+        if trend_diff > 10:
+            trend = 'fatiguing'
+        elif trend_diff < -10:
+            trend = 'energizing'
+
+    overall_fatigue = sum(fatigue_scores) / len(fatigue_scores)
+    overall_metrics = calculate_fatigue_metrics(prompts)
+
+    return {
+        'summary': {
+            'period': f"{dates[0]} to {dates[-1]}",
+            'days': len(dates),
+            'prompts_analyzed': len(prompts),
+            'avg_energy': round(100 - overall_fatigue),
+            'avg_length': round(overall_metrics['avg_length']),
+            'grunt_ratio': round(overall_metrics['grunt_ratio'] * 100),
+        },
+        'sparkline': {
+            'dates': [d[-5:] for d in dates],  # MM-DD format
+            'energy': energy_sparkline,
+            'energy_values': [round(e) for e in energy_scores]
+        },
+        'daily': daily_data,
+        'trend': {
+            'direction': trend,
+            'start_fatigue': round(fatigue_scores[0]) if fatigue_scores else 0,
+            'end_fatigue': round(fatigue_scores[-1]) if fatigue_scores else 0,
+            'change': round(trend_diff)
+        }
+    }
+
+
+def print_week_report(data):
+    """Print weekly energy report."""
+    if 'error' in data:
+        print(data['error'])
+        return
+
+    s = data['summary']
+    spark = data['sparkline']
+    trend = data['trend']
+
+    print("THIS WEEK'S ENERGY LEVELS")
+    print("=" * 65)
+    print(f"Period: {s['period']} | Days: {s['days']} | Prompts: {s['prompts_analyzed']}")
+    print(f"Avg energy: {s['avg_energy']}% | Avg length: {s['avg_length']} chars | Grunts: {s['grunt_ratio']}%")
+    print()
+
+    # Sparkline
+    print(f"Date:   {'  '.join(spark['dates'])}")
+    print(f"Energy: {'    '.join(spark['energy'])}")
+    print()
+
+    # Daily breakdown
+    print("Date        Day   Energy  Len   Grunts  Prompts  Bar")
+    print("-" * 65)
+    for d in data['daily']:
+        print(f"{d['date']} {d['day']} {d['indicator']} {d['energy']:3d}%   {d['avg_length']:3d}   {d['grunt_ratio']:3d}%    {d['prompts']:4d}    {d['energy_bar']}")
+
+    print()
+
+    # Trend
+    if trend['direction'] == 'fatiguing':
+        emoji = '😴'
+        msg = 'WEEK FATIGUE'
+    elif trend['direction'] == 'energizing':
+        emoji = '⚡'
+        msg = 'WEEK ENERGIZING'
+    else:
+        emoji = '➡️ '
+        msg = 'WEEK STEADY'
+
+    print(f"{emoji} {msg}: Fatigue {trend['start_fatigue']}% → {trend['end_fatigue']}% ({trend['change']:+d}%)")
+
+
+def print_today_report(data):
+    """Print today's report in a nice format with fatigue metrics."""
+    if 'error' in data:
+        print(data['error'])
+        return
+
+    s = data['summary']
+    spark = data['sparkline']
+    trend = data['trend']
+
+    print("TODAY'S ENERGY LEVELS")
+    print("=" * 60)
+    print(f"Date: {s['date']} | Prompts: {s['prompts_analyzed']} | Energy: {s['avg_energy']}%")
+    print(f"Avg length: {s['avg_length']} chars | Grunt ratio: {s['grunt_ratio']}%")
+    print()
+
+    # Energy sparkline
+    print(f"Hours:  {'  '.join(spark['hours'])}")
+    print(f"Energy: {'   '.join(spark['energy'])}")
+    print()
+
+    # Hourly breakdown with fatigue metrics
+    print("Hour    Energy  Len   Grunts  Spec   Bar")
+    print("-" * 55)
+    for h in data['hourly']:
+        print(f"{h['hour']:02d}:00 {h['indicator']} {h['energy']:3d}%   {h['avg_length']:3d}   {h['grunt_ratio']:3d}%    {h['specificity']:.1f}   {h['energy_bar']}")
+
+    print()
+
+    # Trend
+    if trend['direction'] == 'fatiguing':
+        emoji = '😴'
+        msg = 'FATIGUING'
+    elif trend['direction'] == 'energizing':
+        emoji = '⚡'
+        msg = 'ENERGIZING'
+    else:
+        emoji = '➡️ '
+        msg = 'STEADY'
+
+    print(f"{emoji} {msg}: Fatigue {trend['start_fatigue']}% → {trend['end_fatigue']}% ({trend['change']:+d}%)")
+
+    # Warning if fatigue is high
+    if s['avg_fatigue'] > 60:
+        print()
+        print("⚠️  High fatigue detected. Consider taking a break.")
+    elif trend['direction'] == 'fatiguing' and trend['change'] > 20:
+        print()
+        print("⚠️  Fatigue increasing rapidly. Pace yourself.")
+
+
+def main():
+    args = parse_args()
+
+    # Handle --today specially
+    if args.today:
+        prompts = history.get_all_prompts(today_only=True)
+        today_data = generate_today_report(prompts)
+        if args.json:
+            print(json.dumps(today_data, indent=2))
+        else:
+            print_today_report(today_data)
+        return
+
+    # Handle --yesterday
+    if args.yesterday:
+        prompts = history.get_all_prompts(yesterday_only=True)
+        yesterday_data = generate_today_report(prompts)  # Same format as today
+        # Update the date in summary
+        from datetime import timedelta as td
+        yesterday_date = (datetime.now() - td(days=1)).strftime('%Y-%m-%d')
+        yesterday_data['summary']['date'] = yesterday_date
+        if args.json:
+            print(json.dumps(yesterday_data, indent=2))
+        else:
+            print("YESTERDAY'S ENERGY LEVELS")
+            print("=" * 60)
+            s = yesterday_data['summary']
+            print(f"Date: {s['date']} | Prompts: {s['prompts_analyzed']} | Energy: {s['avg_energy']}%")
+            print(f"Avg length: {s['avg_length']} chars | Grunt ratio: {s['grunt_ratio']}%")
+            print()
+            spark = yesterday_data['sparkline']
+            print(f"Hours:  {'  '.join(spark['hours'])}")
+            print(f"Energy: {'   '.join(spark['energy'])}")
+            print()
+            print("Hour    Energy  Len   Grunts  Spec   Bar")
+            print("-" * 55)
+            for h in yesterday_data['hourly']:
+                print(f"{h['hour']:02d}:00 {h['indicator']} {h['energy']:3d}%   {h['avg_length']:3d}   {h['grunt_ratio']:3d}%    {h['specificity']:.1f}   {h['energy_bar']}")
+            print()
+            trend = yesterday_data['trend']
+            if trend['direction'] == 'fatiguing':
+                emoji = '😴'
+                msg = 'FATIGUING'
+            elif trend['direction'] == 'energizing':
+                emoji = '⚡'
+                msg = 'ENERGIZING'
+            else:
+                emoji = '➡️ '
+                msg = 'STEADY'
+            print(f"{emoji} {msg}: Fatigue {trend['start_fatigue']}% → {trend['end_fatigue']}% ({trend['change']:+d}%)")
+        return
+
+    # Handle --week
+    if args.week:
+        prompts = history.get_all_prompts(days=7)
+        week_data = generate_week_report(prompts)
+        if args.json:
+            print(json.dumps(week_data, indent=2))
+        else:
+            print_week_report(week_data)
+        return
+
+    # Determine time range
+    days = None if args.all else args.days
+
+    # Read prompts
+    prompts = history.get_all_prompts(
+        days=days,
+        project=args.project,
+        limit=args.limit if not args.all else None
+    )
+
+    if not prompts:
+        print("No prompts found in history.")
+        return
+
+
+    # Score all prompts
+    scores = []
+    prompts_with_scores = []
+    scores_to_store = []
+
+    for prompt in prompts:
+        score = analyzer.score_prompt(prompt.text)
+        scores.append(score.total)
+        prompts_with_scores.append((prompt.text, score.total))
+        scores_to_store.append((
+            prompt.text,
+            score.total,
+            score.category,
+            prompt.timestamp,
+            prompt.project
+        ))
+
+    # Store scores for trend tracking
+    storage.store_scores_batch(scores_to_store)
+
+    # Count prompts with pasted content
+    paste_count = sum(1 for p in prompts if p.has_paste)
+
+    # Get additional stats if needed
+    hourly_stats = None
+    dow_stats = None
+    weekly_trend = None
+    session_data = None
+
+    if args.stamina:
+        hourly_stats = storage.get_hourly_stats()
+        dow_stats = storage.get_day_of_week_stats()
+
+    if args.trend:
+        weekly_trend = storage.get_weekly_averages(weeks=8)
+
+    if args.session:
+        sessions = group_into_sessions(prompts)
+        session_data = []
+        for session in sessions:
+            session_scores = []
+            for p in session:
+                s = analyzer.score_prompt(p.text)
+                session_scores.append(s.total)
+            session_data.append(session_scores)
+
+    # Generate report
+    report_data = report.generate_report(
+        scores=scores,
+        prompts_with_scores=prompts_with_scores,
+        hourly_stats=hourly_stats,
+        dow_stats=dow_stats,
+        weekly_trend=weekly_trend,
+        session_data=session_data,
+        paste_count=paste_count,
+        total_prompts=len(prompts),
+        days=days or 9999,
+        show_shame=not args.pride,
+        show_pride=not args.shame,
+        show_stamina=args.stamina,
+        show_session=args.session,
+        show_trend=args.trend
+    )
+
+    # Output
+    if args.json:
+        print(report.output_json(report_data))
+    else:
+        # Output JSON for Claude to interpret
+        print(report.output_json(report_data))
+
+
+if __name__ == "__main__":
+    main()
