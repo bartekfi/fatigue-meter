@@ -60,11 +60,6 @@ Then add to `~/.claude/settings.json`:
 }
 ```
 
-### Option D: pip (for global CLI use)
-
-```bash
-pip install git+https://github.com/bartekfi/fatigue-meter.git
-```
 
 ## Usage
 
