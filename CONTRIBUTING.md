@@ -6,7 +6,7 @@ Thanks for wanting to help! This tool gets better with community contributions.
 
 1. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/prompt-fatigue.git
+   git clone https://github.com/bartekfi/fatigue-meter.git
    cd prompt-fatigue
    chmod +x fatigue
    ./fatigue --today

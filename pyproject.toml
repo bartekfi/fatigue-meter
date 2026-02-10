@@ -33,9 +33,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/prompt-fatigue"
-Repository = "https://github.com/yourusername/prompt-fatigue"
-Issues = "https://github.com/yourusername/prompt-fatigue/issues"
+Homepage = "https://github.com/bartekfi/fatigue-meter"
+Repository = "https://github.com/bartekfi/fatigue-meter"
+Issues = "https://github.com/bartekfi/fatigue-meter/issues"
 
 [tool.setuptools]
 packages = ["lib"]
