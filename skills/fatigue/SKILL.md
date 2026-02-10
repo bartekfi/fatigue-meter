@@ -1,5 +1,5 @@
 ---
-name: "Prompt Fatigue"
+name: "fatigue"
 description: "Track your prompting energy levels throughout the day. Use when curious about fatigue patterns, checking if you're burning out, or seeing how energy varies by hour/day."
 ---
 
@@ -16,15 +16,17 @@ Track your prompting energy levels. See when you're sharp vs running on fumes.
 
 ## The Command
 
+Run the fatigue CLI from the plugin root:
+
 ```bash
-fatigue --today               # Today's hourly energy sparkline
-fatigue --yesterday           # Yesterday's hourly breakdown
-fatigue --week                # This week's daily breakdown
-fatigue --stamina             # GitHub-style heatmap (hour x day)
-fatigue --session             # Energy by position in session
-fatigue --trend               # Weekly trend comparison
-fatigue --shame               # Show your laziest prompts
-fatigue --pride               # Show your best prompts
+${CLAUDE_PLUGIN_ROOT}/fatigue --today               # Today's hourly energy sparkline
+${CLAUDE_PLUGIN_ROOT}/fatigue --yesterday           # Yesterday's hourly breakdown
+${CLAUDE_PLUGIN_ROOT}/fatigue --week                # This week's daily breakdown
+${CLAUDE_PLUGIN_ROOT}/fatigue --stamina             # GitHub-style heatmap (hour x day)
+${CLAUDE_PLUGIN_ROOT}/fatigue --session             # Energy by position in session
+${CLAUDE_PLUGIN_ROOT}/fatigue --trend               # Weekly trend comparison
+${CLAUDE_PLUGIN_ROOT}/fatigue --shame               # Show your laziest prompts
+${CLAUDE_PLUGIN_ROOT}/fatigue --pride               # Show your best prompts
 ```
 
 ## Energy Scale
@@ -52,16 +54,4 @@ Energy: ▆   ▅   ▇   ▆   ▇   █   ▁   ▅
 Hour    Energy  Len   Grunts  Bar
 14:00 🟢  72%   160     0%    ███████░░░
 15:00 🟠  36%    48    33%    ███░░░░░░░
-```
-
-## Permissions
-
-Add to always-allowed:
-
-```json
-{
-  "permissions": {
-    "allow": ["Bash(fatigue *)"]
-  }
-}
 ```

@@ -25,21 +25,29 @@ fatigue --pride    # See your best work
 
 ## Install
 
-### Option A: Clone + install script
+### Option A: Claude Code plugin (recommended)
+
+From inside Claude Code, run:
+
+```
+/plugin marketplace add bartekfi/fatigue-meter
+/plugin install prompt-fatigue@fatigue-meter
+```
+
+Then use `/prompt-fatigue:fatigue` or just ask Claude to check your fatigue.
+
+### Option B: Clone + install script
 
 ```bash
 git clone https://github.com/bartekfi/fatigue-meter.git
-cd prompt-fatigue
+cd fatigue-meter
 ./install.sh
 ```
 
-### Option B: Manual install as Claude Code skill
+### Option C: Manual install as Claude Code skill
 
 ```bash
-git clone https://github.com/bartekfi/fatigue-meter.git
-mkdir -p ~/.claude/skills/fatigue
-cp -r prompt-fatigue/{fatigue,statusline.sh,SKILL.md,lib} ~/.claude/skills/fatigue/
-chmod +x ~/.claude/skills/fatigue/fatigue
+git clone https://github.com/bartekfi/fatigue-meter.git ~/.claude/skills/fatigue
 ```
 
 Then add to `~/.claude/settings.json`:
@@ -52,13 +60,11 @@ Then add to `~/.claude/settings.json`:
 }
 ```
 
-### Option C: pip (for global CLI use)
+### Option D: pip (for global CLI use)
 
 ```bash
 pip install git+https://github.com/bartekfi/fatigue-meter.git
 ```
-
-Restart Claude Code after installing.
 
 ## Usage
 

@@ -1,0 +1,13 @@
+{
+  "name": "prompt-fatigue",
+  "version": "0.1.0",
+  "description": "Track your Claude Code prompting energy levels. See when you're sharp vs running on fumes.",
+  "author": {
+    "name": "bartekfi",
+    "url": "https://github.com/bartekfi"
+  },
+  "homepage": "https://github.com/bartekfi/fatigue-meter",
+  "repository": "https://github.com/bartekfi/fatigue-meter",
+  "license": "MIT",
+  "keywords": ["fatigue", "productivity", "energy", "prompting", "claude-code"]
+}
