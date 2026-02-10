@@ -1,7 +1,5 @@
 #!/bin/bash
-# Fatigue statusline with gauge bar
-
-input=$(cat)
+# Prompt Fatigue statusline with gauge bar
 
 CACHE_FILE="/tmp/claude-fatigue-status"
 CACHE_AGE=300
@@ -16,14 +14,17 @@ RESET='\033[0m'
 
 get_fatigue_data() {
     python3 << 'PYTHON'
-import json
-import os
+import json, os, re
 from datetime import datetime
 from collections import defaultdict
 
 history_file = os.path.expanduser("~/.claude/history.jsonl")
 today = datetime.now().date()
-hourly = defaultdict(list)
+hourly_texts = defaultdict(list)
+
+GRUNT_PATTERNS = ['yes', 'no', 'ok', 'okay', 'sure', 'continue', 'go',
+                  'do it', 'good', 'great', 'nice', 'thanks', "let's do it",
+                  "let's go", 'sounds good']
 
 with open(history_file) as f:
     for line in f:
@@ -33,23 +34,33 @@ with open(history_file) as f:
             if ts.date() == today:
                 text = entry.get('display', '')
                 if text and not text.startswith('/'):
-                    hourly[ts.hour].append(len(text))
-        except:
+                    hourly_texts[ts.hour].append(text)
+        except json.JSONDecodeError:
             pass
 
-if not hourly:
+if not hourly_texts:
     print("50")
     exit()
 
-energies = []
-for h in sorted(hourly.keys()):
-    lengths = hourly[h]
-    avg_len = sum(lengths) / len(lengths)
-    grunts = sum(1 for l in lengths if l < 20) / len(lengths)
-    energy = min(100, max(0, (avg_len / 2) - (grunts * 40)))
-    energies.append(int(energy))
+# Use the same formula as the main fatigue tool
+last_hour = max(hourly_texts.keys())
+texts = hourly_texts[last_hour]
+lengths = [len(t) for t in texts]
+avg_length = sum(lengths) / len(lengths)
+grunts = sum(1 for t in texts if t.lower().strip().rstrip('.!') in GRUNT_PATTERNS or len(t) < 15)
+grunt_ratio = grunts / len(texts)
+specificity = 0
+for t in texts:
+    specificity += len(re.findall(r'\b\w+\.(py|js|ts|tsx|go|rs|java|cpp)\b', t, re.I))
+    specificity += len(re.findall(r'`[^`]+`', t))
+spec_per_prompt = specificity / len(texts)
 
-print(energies[-1] if energies else 50)
+length_fatigue = max(0, min(100, 100 - (avg_length / 2)))
+grunt_fatigue = grunt_ratio * 100
+spec_fatigue = max(0, min(100, 100 - (spec_per_prompt * 50)))
+fatigue = (length_fatigue * 0.4) + (grunt_fatigue * 0.4) + (spec_fatigue * 0.2)
+energy = int(100 - fatigue)
+print(max(0, min(100, energy)))
 PYTHON
 }
 

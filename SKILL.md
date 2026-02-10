@@ -1,9 +1,9 @@
 ---
-name: "Fatigue"
+name: "Prompt Fatigue"
 description: "Track your prompting energy levels throughout the day. Use when curious about fatigue patterns, checking if you're burning out, or seeing how energy varies by hour/day."
 ---
 
-# Fatigue
+# Prompt Fatigue
 
 Track your prompting energy levels. See when you're sharp vs running on fumes.
 

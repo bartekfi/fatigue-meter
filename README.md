@@ -1,45 +1,116 @@
-# Fatigue
+# Prompt Fatigue
 
-Track your Claude Code prompting energy levels. See when you're sharp vs running on fumes.
+**Are you prompting Claude at your best, or just mashing Enter?**
+
+Track your Claude Code prompting energy levels throughout the day. See when you're sharp, spot when you're fading, and catch yourself before you burn out.
 
 ```
 energy ██████░░░░ steady (63%)
 ```
 
-## What It Does
+<!-- TODO: Add terminal recording GIF here -->
 
-Analyzes your Claude Code prompt history and calculates "energy" based on:
-- **Prompt length** - shorter prompts = more fatigued
-- **Grunt ratio** - "yes", "ok", "continue" patterns indicate fatigue
-- **Specificity** - file refs and code mentions fade when tired
+## Why This Exists
 
-## Installation
+Your prompt quality directly affects Claude's output quality. When you're tired, your prompts get shorter, vaguer, and lazier — and Claude's responses suffer. Prompt Fatigue makes this invisible pattern visible.
 
-### 1. Install the skill
+No judgment. Just data.
+
+## The Fun Part
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -r . ~/.claude/skills/fatigue
+fatigue --shame    # See your laziest prompts (we all have them)
+fatigue --pride    # See your best work
+```
+
+## Install
+
+### Option A: Clone + install script
+
+```bash
+git clone https://github.com/yourusername/prompt-fatigue.git
+cd prompt-fatigue
+./install.sh
+```
+
+### Option B: Manual install as Claude Code skill
+
+```bash
+git clone https://github.com/yourusername/prompt-fatigue.git
+mkdir -p ~/.claude/skills/fatigue
+cp -r prompt-fatigue/{fatigue,statusline.sh,SKILL.md,lib} ~/.claude/skills/fatigue/
 chmod +x ~/.claude/skills/fatigue/fatigue
 ```
 
-### 2. Add to allowed commands (optional)
-
-Add to `~/.claude/settings.json`:
+Then add to `~/.claude/settings.json`:
 
 ```json
 {
   "permissions": {
-    "allow": [
-      "Bash(~/.claude/skills/fatigue/fatigue:*)"
-    ]
+    "allow": ["Bash(~/.claude/skills/fatigue/fatigue:*)"]
   }
 }
 ```
 
-### 3. Enable status bar
+### Option C: pip (for global CLI use)
 
-Add to `~/.claude/settings.json`:
+```bash
+pip install git+https://github.com/yourusername/prompt-fatigue.git
+```
+
+Restart Claude Code after installing.
+
+## Usage
+
+```bash
+fatigue --today       # Today's hourly energy levels
+fatigue --yesterday   # Yesterday's breakdown
+fatigue --week        # This week's daily energy
+fatigue --stamina     # GitHub-style quality heatmap
+fatigue --trend       # Weekly trend comparison
+fatigue --shame       # Hall of shame (laziest prompts)
+fatigue --pride       # Hall of fame (best prompts)
+fatigue --session     # Energy decay within sessions
+fatigue --json        # Raw JSON output
+```
+
+## Example Output
+
+```
+TODAY'S ENERGY LEVELS
+============================================================
+Date: 2026-01-15 | Prompts: 42 | Energy: 68%
+
+Hours:  09  10  11  12  13  14  15
+Energy: ▇   ▆   █   ▅   ▃   ▁   ▅
+
+Hour    Energy  Len   Grunts  Spec   Bar
+-------------------------------------------------------
+09:00 🟢  78%   210     5%    2.1   ███████░░░
+10:00 🟢  72%   185     8%    1.8   ███████░░░
+11:00 🟢  82%   290     3%    3.2   ████████░░
+12:00 🟡  58%   120    15%    1.0   █████░░░░░
+13:00 🟠  42%    65    35%    0.4   ████░░░░░░
+14:00 🔴  18%    22    60%    0.1   █░░░░░░░░░
+15:00 🟡  55%   140    12%    1.2   █████░░░░░
+
+😴 FATIGUING: Fatigue 22% → 45% (+23%)
+```
+
+## Energy Scale
+
+| Energy | Word | Color | Meaning |
+|--------|------|-------|---------|
+| 80%+   | sharp | green | Peak focus, detailed prompts |
+| 65-80% | focused | green | Good energy, specific requests |
+| 50-65% | steady | yellow | Normal, adequate prompts |
+| 35-50% | fading | orange | Getting tired, shorter prompts |
+| 20-35% | tired | red | Low energy, vague requests |
+| <20%   | fried | red | Take a break |
+
+## Status Bar
+
+Add a live energy gauge to your Claude Code status bar:
 
 ```json
 {
@@ -50,57 +121,42 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-Then restart Claude Code.
-
-## Usage
-
-```bash
-fatigue --today               # Today's hourly energy
-fatigue --yesterday           # Yesterday's breakdown
-fatigue --week                # This week's daily breakdown
-fatigue --stamina             # GitHub-style heatmap
-fatigue --trend               # Weekly trend comparison
-fatigue --shame               # Your laziest prompts
-fatigue --pride               # Your best prompts
-```
-
-## Energy Scale
-
-| Energy | Word | Color | Meaning |
-|--------|------|-------|---------|
-| 80%+ | sharp | green | Peak focus |
-| 65-80% | focused | green | Good energy |
-| 50-65% | steady | yellow | Normal |
-| 35-50% | fading | orange | Getting tired |
-| 20-35% | tired | red | Low energy |
-| <20% | fried | red | Take a break |
-
-## Example Output
-
-```
-TODAY'S ENERGY LEVELS
-============================================================
-Date: 2025-12-20 | Prompts: 77 | Energy: 62%
-
-Hour    Energy  Len   Grunts  Bar
--------------------------------------------------------
-10:00 🟡  62%   142    17%    ██████░░░░
-11:00 🟡  50%    69     9%    █████░░░░░
-12:00 🟡  60%   240    50%    ██████░░░░
-13:00 🔴  20%    15    58%    ██░░░░░░░░
-14:00 🟠  45%   124    50%    ████░░░░░░
-15:00 🟢  80%   362     0%    ████████░░
-```
-
-## Status Bar
-
-The status bar shows your current energy level:
+Shows your current energy with a 5-minute cache:
 
 ```
 energy ████████░░ sharp (82%)
 energy ██████░░░░ steady (63%)
 energy ████░░░░░░ fading (42%)
-energy ██░░░░░░░░ tired (25%)
 ```
 
-Cached for 5 minutes to keep it fast.
+## How It Works
+
+Prompt Fatigue reads your local Claude Code history (`~/.claude/history.jsonl`) and scores each prompt using heuristics:
+
+**Fatigue signals** (energy reports):
+- **Prompt length** — shorter prompts indicate less effort
+- **Grunt ratio** — "yes", "ok", "continue" patterns signal fatigue
+- **Specificity** — file references and code mentions fade when you're tired
+
+**Quality scoring** (detailed reports):
+- **Specificity (25%)** — file paths, code references, inline code
+- **Context (25%)** — reasoning markers ("because", "so that")
+- **Clarity (20%)** — imperative vs passive language
+- **Constraints (15%)** — acceptance criteria markers
+- **Verification (15%)** — testing and validation mentions
+
+All processing is **100% local**. No data leaves your machine.
+
+## Requirements
+
+- Python 3.10+
+- Claude Code
+- macOS or Linux
+
+## Contributing
+
+Contributions welcome! The easiest way to help: **add grunt patterns** you've caught yourself using. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE)

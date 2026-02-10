@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Fatigue - Prompt Energy Tracker
+Prompt Fatigue - Prompt Energy Tracker
 
 Tracks your prompting energy levels throughout the day. See when you're
 sharp vs running on fumes.
 """
 
+__version__ = "0.1.0"
+
 import sys
 import os
+import re
 import argparse
 import json
 from datetime import datetime, timedelta
@@ -28,6 +31,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Analyze prompt quality in your Claude Code history'
     )
+    parser.add_argument('--version', action='version',
+                       version=f'prompt-fatigue {__version__}')
 
     parser.add_argument('--all', action='store_true',
                        help='Analyze entire history (default: last 30 days)')
@@ -107,7 +112,6 @@ def calculate_fatigue_metrics(prompts):
                  or len(p.text) < 15)
 
     # Count specificity (file refs, code, etc.)
-    import re
     specificity = 0
     for p in prompts:
         specificity += len(re.findall(r'\b\w+\.(py|js|ts|tsx|go|rs|java|cpp)\b', p.text, re.I))
@@ -406,7 +410,7 @@ def print_week_report(data):
     print(f"{emoji} {msg}: Fatigue {trend['start_fatigue']}% → {trend['end_fatigue']}% ({trend['change']:+d}%)")
 
 
-def print_today_report(data):
+def print_today_report(data, title="TODAY'S ENERGY LEVELS"):
     """Print today's report in a nice format with fatigue metrics."""
     if 'error' in data:
         print(data['error'])
@@ -416,7 +420,7 @@ def print_today_report(data):
     spark = data['sparkline']
     trend = data['trend']
 
-    print("TODAY'S ENERGY LEVELS")
+    print(title)
     print("=" * 60)
     print(f"Date: {s['date']} | Prompts: {s['prompts_analyzed']} | Energy: {s['avg_energy']}%")
     print(f"Avg length: {s['avg_length']} chars | Grunt ratio: {s['grunt_ratio']}%")
@@ -473,40 +477,13 @@ def main():
     # Handle --yesterday
     if args.yesterday:
         prompts = history.get_all_prompts(yesterday_only=True)
-        yesterday_data = generate_today_report(prompts)  # Same format as today
-        # Update the date in summary
-        from datetime import timedelta as td
-        yesterday_date = (datetime.now() - td(days=1)).strftime('%Y-%m-%d')
+        yesterday_data = generate_today_report(prompts)
+        yesterday_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         yesterday_data['summary']['date'] = yesterday_date
         if args.json:
             print(json.dumps(yesterday_data, indent=2))
         else:
-            print("YESTERDAY'S ENERGY LEVELS")
-            print("=" * 60)
-            s = yesterday_data['summary']
-            print(f"Date: {s['date']} | Prompts: {s['prompts_analyzed']} | Energy: {s['avg_energy']}%")
-            print(f"Avg length: {s['avg_length']} chars | Grunt ratio: {s['grunt_ratio']}%")
-            print()
-            spark = yesterday_data['sparkline']
-            print(f"Hours:  {'  '.join(spark['hours'])}")
-            print(f"Energy: {'   '.join(spark['energy'])}")
-            print()
-            print("Hour    Energy  Len   Grunts  Spec   Bar")
-            print("-" * 55)
-            for h in yesterday_data['hourly']:
-                print(f"{h['hour']:02d}:00 {h['indicator']} {h['energy']:3d}%   {h['avg_length']:3d}   {h['grunt_ratio']:3d}%    {h['specificity']:.1f}   {h['energy_bar']}")
-            print()
-            trend = yesterday_data['trend']
-            if trend['direction'] == 'fatiguing':
-                emoji = '😴'
-                msg = 'FATIGUING'
-            elif trend['direction'] == 'energizing':
-                emoji = '⚡'
-                msg = 'ENERGIZING'
-            else:
-                emoji = '➡️ '
-                msg = 'STEADY'
-            print(f"{emoji} {msg}: Fatigue {trend['start_fatigue']}% → {trend['end_fatigue']}% ({trend['change']:+d}%)")
+            print_today_report(yesterday_data, title="YESTERDAY'S ENERGY LEVELS")
         return
 
     # Handle --week
@@ -591,8 +568,8 @@ def main():
         paste_count=paste_count,
         total_prompts=len(prompts),
         days=days or 9999,
-        show_shame=not args.pride,
-        show_pride=not args.shame,
+        show_shame=args.shame or not args.pride,
+        show_pride=args.pride or not args.shame,
         show_stamina=args.stamina,
         show_session=args.session,
         show_trend=args.trend
@@ -602,8 +579,7 @@ def main():
     if args.json:
         print(report.output_json(report_data))
     else:
-        # Output JSON for Claude to interpret
-        print(report.output_json(report_data))
+        print(report.format_ascii_report(report_data))
 
 
 if __name__ == "__main__":

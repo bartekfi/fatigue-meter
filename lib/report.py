@@ -237,7 +237,7 @@ def format_ascii_report(report: dict) -> str:
 
     # Header
     lines.append('┌─────────────────────────────────────────────┐')
-    lines.append('│  LAZY METER - Prompt Quality Report         │')
+    lines.append('│  PROMPT FATIGUE - Quality Report             │')
     if 'summary' in report:
         s = report['summary']
         lines.append(f'│  Analyzed: {s["prompts_analyzed"]} prompts (last {s["time_period_days"]} days)       │')
