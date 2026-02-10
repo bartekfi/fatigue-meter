@@ -1,5 +1,6 @@
 #!/bin/bash
 # Prompt Fatigue statusline with gauge bar
+cat > /dev/null
 
 CACHE_FILE="/tmp/claude-fatigue-status"
 CACHE_AGE=300
