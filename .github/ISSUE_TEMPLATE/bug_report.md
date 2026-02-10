@@ -30,7 +30,7 @@ Paste the output here
 
 - Python version: (output of `python --version`)
 - OS: (macOS, Linux, WSL, etc.)
-- Installation: (cloned repo, installed via pip, etc.)
+- Installation: (plugin, clone + install.sh, manual clone)
 
 ## Additional context
 
