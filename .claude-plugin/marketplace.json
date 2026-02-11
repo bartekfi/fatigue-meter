@@ -10,10 +10,7 @@
   "plugins": [
     {
       "name": "prompt-fatigue",
-      "source": {
-        "source": "github",
-        "repo": "bartekfi/fatigue-meter"
-      },
+      "source": "./",
       "description": "Track your prompting energy levels throughout the day. See when you're sharp vs running on fumes.",
       "version": "0.1.0",
       "author": {
