@@ -2,55 +2,35 @@
 
 **Are you prompting Claude at your best, or just mashing Enter?**
 
-Track your Claude Code prompting energy levels throughout the day. See when you're sharp, spot when you're fading, and catch yourself before you burn out.
-
 ```
 energy ██████░░░░ steady (63%)
 ```
 
+Prompt Fatigue tracks your energy levels throughout the day by analyzing your Claude Code prompt history. It detects when you're sharp, when you're fading, and when you should probably take a break.
+
+100% local. No data leaves your machine.
+
 <!-- TODO: Add terminal recording GIF here -->
-
-## Why This Exists
-
-Your prompt quality directly affects Claude's output quality. When you're tired, your prompts get shorter, vaguer, and lazier — and Claude's responses suffer. Prompt Fatigue makes this invisible pattern visible.
-
-No judgment. Just data.
-
-## The Fun Part
-
-```bash
-fatigue --shame    # See your laziest prompts (we all have them)
-fatigue --pride    # See your best work
-```
 
 ## Install
 
-### Option A: Claude Code plugin (recommended)
-
-From inside Claude Code, run:
+Inside Claude Code, run:
 
 ```
 /plugin marketplace add bartekfi/fatigue-meter
 /plugin install prompt-fatigue@fatigue-meter
 ```
 
-Then use `/prompt-fatigue:fatigue` or just ask Claude to check your fatigue.
+That's it. The status bar energy gauge configures itself on next session.
 
-### Option B: Clone + install script
-
-```bash
-git clone https://github.com/bartekfi/fatigue-meter.git
-cd fatigue-meter
-./install.sh
-```
-
-### Option C: Manual install as Claude Code skill
+<details>
+<summary>Alternative: manual install</summary>
 
 ```bash
 git clone https://github.com/bartekfi/fatigue-meter.git ~/.claude/skills/fatigue
 ```
 
-Then add to `~/.claude/settings.json`:
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -59,23 +39,28 @@ Then add to `~/.claude/settings.json`:
   }
 }
 ```
-
+</details>
 
 ## Usage
 
-```bash
-fatigue --today       # Today's hourly energy levels
+Once installed, just ask Claude: *"check my fatigue"*, *"how's my energy today?"*, or *"show me my laziest prompts"*.
+
+Or invoke directly:
+
+```
+fatigue --today       # Today's hourly energy
 fatigue --yesterday   # Yesterday's breakdown
 fatigue --week        # This week's daily energy
-fatigue --stamina     # GitHub-style quality heatmap
-fatigue --trend       # Weekly trend comparison
-fatigue --shame       # Hall of shame (laziest prompts)
-fatigue --pride       # Hall of fame (best prompts)
+fatigue --shame       # Your laziest prompts
+fatigue --pride       # Your best prompts
+fatigue --stamina     # Quality heatmap
+fatigue --trend       # Weekly trend
 fatigue --session     # Energy decay within sessions
-fatigue --json        # Raw JSON output
 ```
 
-## Example Output
+## What It Looks Like
+
+### Hourly energy breakdown
 
 ```
 TODAY'S ENERGY LEVELS
@@ -98,55 +83,93 @@ Hour    Energy  Len   Grunts  Spec   Bar
 😴 FATIGUING: Fatigue 22% → 45% (+23%)
 ```
 
-## Energy Scale
+### Hall of shame
 
-| Energy | Word | Color | Meaning |
-|--------|------|-------|---------|
-| 80%+   | sharp | green | Peak focus, detailed prompts |
-| 65-80% | focused | green | Good energy, specific requests |
-| 50-65% | steady | yellow | Normal, adequate prompts |
-| 35-50% | fading | orange | Getting tired, shorter prompts |
-| 20-35% | tired | red | Low energy, vague requests |
-| <20%   | fried | red | Take a break |
+Your laziest prompts, ranked. We all have them.
 
-## Status Bar
-
-Add a live energy gauge to your Claude Code status bar:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/skills/fatigue/statusline.sh"
-  }
-}
+```
+Hall of Shame:
+  1. "ok do it" (score: 1.0)
+  2. "yes" (score: 1.0)
+  3. "fix it" (score: 1.5)
+  4. "looks good" (score: 1.0)
+  5. "can you make it better" (score: 2.1)
 ```
 
-Shows your current energy with a 5-minute cache:
+### Hall of fame
+
+Your most detailed, high-effort prompts.
+
+```
+Hall of Fame:
+  1. "Refactor the auth middleware in src/middleware/auth.ts to use..." (score: 9.2)
+  2. "Add integration tests for the /api/users endpoint. Cover th..." (score: 8.8)
+  3. "The build fails on CI because `tsconfig.json` references pa..." (score: 8.5)
+```
+
+### Status bar
+
+A live energy gauge at the bottom of Claude Code, updated every 5 minutes:
 
 ```
 energy ████████░░ sharp (82%)
 energy ██████░░░░ steady (63%)
 energy ████░░░░░░ fading (42%)
+energy ██░░░░░░░░ tired (25%)
 ```
 
-## How It Works
+## Energy Scale
 
-Prompt Fatigue reads your local Claude Code history (`~/.claude/history.jsonl`) and scores each prompt using heuristics:
+| Energy | Level | Meaning |
+|--------|-------|---------|
+| 80%+   | 🟢 sharp | Peak focus, detailed prompts |
+| 65-80% | 🟢 focused | Good energy, specific requests |
+| 50-65% | 🟡 steady | Normal, adequate prompts |
+| 35-50% | 🟠 fading | Getting tired, shorter prompts |
+| 20-35% | 🔴 tired | Low energy, vague requests |
+| <20%   | 🔴 fried | Take a break |
 
-**Fatigue signals** (energy reports):
-- **Prompt length** — shorter prompts indicate less effort
-- **Grunt ratio** — "yes", "ok", "continue" patterns signal fatigue
-- **Specificity** — file references and code mentions fade when you're tired
+## How Scoring Works
 
-**Quality scoring** (detailed reports):
-- **Specificity (25%)** — file paths, code references, inline code
-- **Context (25%)** — reasoning markers ("because", "so that")
-- **Clarity (20%)** — imperative vs passive language
-- **Constraints (15%)** — acceptance criteria markers
-- **Verification (15%)** — testing and validation mentions
+### Energy score (--today, --yesterday, --week)
 
-All processing is **100% local**. No data leaves your machine.
+Three signals, weighted:
+
+| Signal | Weight | What it measures |
+|--------|--------|-----------------|
+| Prompt length | 40% | Shorter prompts = more fatigued. A 200-char prompt scores much better than a 30-char one. |
+| Grunt ratio | 40% | Percentage of "yes", "ok", "continue", "do it" and other low-effort patterns. Also catches anything under 15 characters. |
+| Specificity | 20% | File references (`auth.ts`), inline code (`` `foo()` ``), and `@mentions`. These disappear when you're tired. |
+
+The formula: `energy = 100 - (length_fatigue * 0.4 + grunt_fatigue * 0.4 + specificity_fatigue * 0.2)`
+
+### Quality score (--shame, --pride, --stamina)
+
+A 1-10 score with five dimensions:
+
+| Dimension | Weight | Positive signals |
+|-----------|--------|-----------------|
+| Specificity | 25% | File paths, code refs, inline code, URLs, CamelCase/snake_case identifiers |
+| Context | 25% | "because", "so that", "in order to", "the goal is" |
+| Clarity | 20% | Imperative language ("add", "fix", "refactor") vs passive ("can you", "would it be") |
+| Constraints | 15% | "should", "must", "ensure", "make sure", "validate" |
+| Verification | 15% | "test", "verify", "assert", "should pass", "build" |
+
+**Penalties** for hedge words ("maybe", "probably", "just", "quick") and vague terms ("make it better", "fix it", "whatever").
+
+**Bonuses** for structure (bullet points, numbered lists) and reasonable length (30+ words).
+
+### What counts as a grunt?
+
+These patterns score a flat 1.0 — the lowest possible:
+
+```
+yes, no, ok, okay, sure, yep, nope, continue, go, do it,
+good, great, nice, cool, fine, perfect, awesome, thanks,
+let's do it, let's go, sounds good, looks good
+```
+
+Plus any single-character response, bare numbers, and one-word questions.
 
 ## Requirements
 
@@ -156,7 +179,7 @@ All processing is **100% local**. No data leaves your machine.
 
 ## Contributing
 
-Contributions welcome! The easiest way to help: **add grunt patterns** you've caught yourself using. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The easiest way to help: **add grunt patterns** you've caught yourself using. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
